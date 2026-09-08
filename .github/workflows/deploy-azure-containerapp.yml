@@ -42,7 +42,7 @@ jobs:
           containerAppName: ${{ env.CONTAINER_APP_NAME }}
           resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENVIRONMENT }}
-          targetPort: 5001
+          targetPort: 4021
           ingress: external
           registryUsername: ${{ steps.acr.outputs.REGISTRY_USERNAME }}
           registryPassword: ${{ steps.acr.outputs.REGISTRY_PASSWORD }}
