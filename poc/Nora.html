@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coverage Diagnostics UI</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f5f7fb;
+        margin: 0;
+        padding: 40px 20px;
+      }
+
+      .container {
+        max-width: 780px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        padding: 24px;
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #1f2937;
+      }
+
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #1d4ed8;
+      }
+
+      pre {
+        background: #111827;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        overflow: auto;
+        white-space: pre-wrap;
+        margin-top: 20px;
+        min-height: 220px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Coverage Diagnostics Workflow</h2>
+      <button id="runBtn">Run workflow</button>
+      <pre id="result">Click the button to run the workflow.</pre>
+    </div>
+
+    <script>
+      const sampleReport = {
+        report_id: "CAR-202",
+        subscriber_id: "sub-202",
+        coverage_status: "degraded",
+        service_availability: "partial",
+        outage_detected: true,
+        serving_market: "ATL-01",
+        roaming_state: "home",
+        registration_state: "registered",
+        observations: ["coverage degradation", "regional outage"]
+      };
+
+      const resultBox = document.getElementById("result");
+      const runBtn = document.getElementById("runBtn");
+
+      runBtn.addEventListener("click", async () => {
+        resultBox.textContent = "Running workflow...";
+
+        try {
+          const response = await fetch("http://127.0.0.1:8000/coverage-diagnostics", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(sampleReport)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          resultBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          resultBox.textContent = "Error: " + error.message + "\n\nMake sure your FastAPI app is running on http://127.0.0.1:8000";
+        }
+      });
+    </script>
+  </body>
+</html>
