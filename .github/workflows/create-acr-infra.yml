@@ -1,0 +1,74 @@
+name: Create ACR Infrastructure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP_NAME: RehnaResourceGroup
+      ACR_NAME: rehnaacr
+
+    defaults:
+      run:
+        working-directory: deploy/acr
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check and Import Existing Resources
+        run: |
+          set -e
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          ACR_ID="${RG_ID}/providers/Microsoft.ContainerRegistry/registries/${ACR_NAME}"
+
+          # Reuse the resource group if it already exists in Azure, otherwise Terraform will create it
+          if az group show --name "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_resource_group.main > /dev/null 2>&1; then
+              echo "Resource group ${RESOURCE_GROUP_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_resource_group.main "${RG_ID}"
+            else
+              echo "Resource group ${RESOURCE_GROUP_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+          # Reuse the container registry if it already exists in Azure, otherwise Terraform will create it
+          if az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_container_registry.main > /dev/null 2>&1; then
+              echo "Container registry ${ACR_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_container_registry.main "${ACR_ID}"
+            else
+              echo "Container registry ${ACR_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Container registry ${ACR_NAME} not found -> Terraform will create it"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve

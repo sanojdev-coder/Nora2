@@ -1,0 +1,91 @@
+name: Create Container App Infrastructure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP_NAME: RehnaResourceGroup
+      LOG_ANALYTICS_WORKSPACE_NAME: rehna-containerapps-logs
+      CONTAINER_APP_ENVIRONMENT_NAME: rehna-container-apps-env
+
+    defaults:
+      run:
+        working-directory: deploy/containerapp
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Install Azure Container Apps extension
+        run: az extension add --name containerapp --yes
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check and Import Existing Resources
+        run: |
+          set -e
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          WORKSPACE_ID="${RG_ID}/providers/Microsoft.OperationalInsights/workspaces/${LOG_ANALYTICS_WORKSPACE_NAME}"
+          CONTAINER_APP_ENV_ID="${RG_ID}/providers/Microsoft.App/managedEnvironments/${CONTAINER_APP_ENVIRONMENT_NAME}"
+
+          # Reuse the resource group if it already exists in Azure, otherwise Terraform will create it
+          if az group show --name "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_resource_group.main > /dev/null 2>&1; then
+              echo "Resource group ${RESOURCE_GROUP_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_resource_group.main "${RG_ID}"
+            else
+              echo "Resource group ${RESOURCE_GROUP_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+          # Reuse the log analytics workspace if it already exists in Azure, otherwise Terraform will create it
+          if az monitor log-analytics workspace show --workspace-name "${LOG_ANALYTICS_WORKSPACE_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_log_analytics_workspace.main > /dev/null 2>&1; then
+              echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_log_analytics_workspace.main "${WORKSPACE_ID}"
+            else
+              echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} not found -> Terraform will create it"
+          fi
+
+          # Reuse the container app environment if it already exists in Azure, otherwise Terraform will create it
+          if az containerapp env show --name "${CONTAINER_APP_ENVIRONMENT_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_container_app_environment.main > /dev/null 2>&1; then
+              echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_container_app_environment.main "${CONTAINER_APP_ENV_ID}"
+            else
+              echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} not found -> Terraform will create it"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve

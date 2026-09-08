@@ -1,0 +1,52 @@
+name: Deploy ACR Image to Container App
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (image pushed by acr-docker-image.yml)"
+        required: false
+        default: "v1"
+
+env:
+  AZURE_RESOURCE_GROUP: RehnaResourceGroup
+  CONTAINER_APP_ENVIRONMENT: rehna-container-apps-env
+  CONTAINER_APP_NAME: rehna-imagedetector-app
+  ACR_NAME: rehnaacr
+  ACR_LOGIN_SERVER: rehnaacr.azurecr.io
+  IMAGE_NAME: pythonapp
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get ACR admin credentials
+        id: acr
+        run: |
+          echo "REGISTRY_USERNAME=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query username -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "REGISTRY_PASSWORD=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query \"passwords[0].value\" -o tsv)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy image to Container App
+        uses: Azure/container-app-deploy@v1
+        with:
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
+          containerAppName: ${{ env.CONTAINER_APP_NAME }}
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          containerAppEnvironment: ${{ env.CONTAINER_APP_ENVIRONMENT }}
+          targetPort: 5001
+          ingress: external
+          registryUsername: ${{ steps.acr.outputs.REGISTRY_USERNAME }}
+          registryPassword: ${{ steps.acr.outputs.REGISTRY_PASSWORD }}
+          cpu: 0.5
+          memory: 1Gi
+          minReplicas: 0
+          maxReplicas: 3

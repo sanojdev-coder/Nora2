@@ -79,7 +79,7 @@
         resultBox.textContent = "Running workflow...";
 
         try {
-          const response = await fetch("http://127.0.0.1:8000/coverage-diagnostics", {
+          const response = await fetch("http://127.0.0.1:4021/coverage-diagnostics", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -94,7 +94,7 @@
           const data = await response.json();
           resultBox.textContent = JSON.stringify(data, null, 2);
         } catch (error) {
-          resultBox.textContent = "Error: " + error.message + "\n\nMake sure your FastAPI app is running on http://127.0.0.1:8000";
+          resultBox.textContent = "Error: " + error.message + "\n\nMake sure your FastAPI app is running on http://127.0.0.1:4021";
         }
       });
     </script>
