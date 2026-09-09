@@ -11,7 +11,7 @@ on:
 env:
   AZURE_RESOURCE_GROUP: RehnaResourceGroup
   CONTAINER_APP_ENVIRONMENT: rehna-container-apps-env
-  CONTAINER_APP_NAME: rehna-imagedetector-app
+  CONTAINER_APP_NAME: rehna-nora-app
   ACR_NAME: rehnaacr
   ACR_LOGIN_SERVER: rehnaacr.azurecr.io
   IMAGE_NAME: pythonapp
@@ -44,7 +44,20 @@ jobs:
 
       - name: Deploy image to Container App
         run: |
+          APP_EXISTS=false
           if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
+            APP_EXISTS=true
+            PROVISIONING_STATE=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --query properties.provisioningState -o tsv)
+            echo "Current Container App provisioning state: ${PROVISIONING_STATE}"
+
+            if [ "${PROVISIONING_STATE}" = "Failed" ]; then
+              echo "Container App is in Failed state. Deleting and recreating it."
+              az containerapp delete --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --yes
+              APP_EXISTS=false
+            fi
+          fi
+
+          if [ "${APP_EXISTS}" = "true" ]; then
             az containerapp registry set \
               --name "${{ env.CONTAINER_APP_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
