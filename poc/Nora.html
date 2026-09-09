@@ -79,7 +79,7 @@
         resultBox.textContent = "Running workflow...";
 
         try {
-          const response = await fetch("http://127.0.0.1:4021/coverage-diagnostics", {
+          const response = await fetch("/coverage-diagnostics", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
