@@ -243,6 +243,17 @@ jobs:
 
       - name: Deploy image to Container App
         run: |
+          REGISTRY_USERNAME=$(az acr credential show --name "${{ env.ACR_NAME }}" --query username -o tsv)
+          REGISTRY_PASSWORD=$(az acr credential show --name "${{ env.ACR_NAME }}" --query "passwords[0].value" -o tsv)
+
+          echo "Registry username length: ${#REGISTRY_USERNAME}"
+          echo "Registry password length: ${#REGISTRY_PASSWORD}"
+
+          if [ -z "${REGISTRY_USERNAME}" ] || [ -z "${REGISTRY_PASSWORD}" ]; then
+            echo "ACR credentials are empty. Cannot deploy container app."
+            exit 1
+          fi
+
           APP_EXISTS=false
           if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
             APP_EXISTS=true
@@ -261,8 +272,8 @@ jobs:
               --name "${{ env.CONTAINER_APP_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
               --server "${{ env.ACR_LOGIN_SERVER }}" \
-              --username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
-              --password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+              --username "${REGISTRY_USERNAME}" \
+              --password "${REGISTRY_PASSWORD}"
 
             az containerapp update \
               --name "${{ env.CONTAINER_APP_NAME }}" \
@@ -282,6 +293,6 @@ jobs:
               --min-replicas 0 \
               --max-replicas 3 \
               --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
-              --registry-password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+              --registry-username "${REGISTRY_USERNAME}" \
+              --registry-password "${REGISTRY_PASSWORD}"
           fi
