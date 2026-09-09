@@ -29,24 +29,43 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Enable ACR admin user
+        run: |
+          az acr update --name "${{ env.ACR_NAME }}" --admin-enabled true
+
       - name: Get ACR admin credentials
         id: acr
         run: |
           echo "REGISTRY_USERNAME=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query username -o tsv)" >> "$GITHUB_OUTPUT"
           echo "REGISTRY_PASSWORD=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query \"passwords[0].value\" -o tsv)" >> "$GITHUB_OUTPUT"
 
+      - name: Install Azure Container Apps extension
+        run: az extension add --name containerapp --yes
+
       - name: Deploy image to Container App
-        uses: Azure/container-apps-deploy-action@v2
-        with:
-          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
-          containerAppName: ${{ env.CONTAINER_APP_NAME }}
-          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
-          containerAppEnvironment: ${{ env.CONTAINER_APP_ENVIRONMENT }}
-          targetPort: 4021
-          ingress: external
-          registryUsername: ${{ steps.acr.outputs.REGISTRY_USERNAME }}
-          registryPassword: ${{ steps.acr.outputs.REGISTRY_PASSWORD }}
-          cpu: 0.5
-          memory: 1Gi
-          minReplicas: 0
-          maxReplicas: 3
+        run: |
+          if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
+            az containerapp update \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}" \
+              --set-env-vars "APP_ENV=production" \
+              --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
+              --registry-password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+          else
+            az containerapp create \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --environment "${{ env.CONTAINER_APP_ENVIRONMENT }}" \
+              --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}" \
+              --ingress external \
+              --target-port 4021 \
+              --cpu 0.5 \
+              --memory 1Gi \
+              --min-replicas 0 \
+              --max-replicas 3 \
+              --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
+              --registry-password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+          fi
