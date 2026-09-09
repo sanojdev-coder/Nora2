@@ -13,7 +13,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: deploy/acr
+        working-directory: ./poc/deploy/acr
 
     steps:
       - name: Checkout repository
