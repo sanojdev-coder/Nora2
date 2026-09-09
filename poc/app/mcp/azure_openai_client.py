@@ -39,6 +39,8 @@ class AzureOpenAIClient:
         self.api_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
         self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
         self._azure_client: Any = None
+        self.last_status = "stub"
+        self.last_error: str | None = None
 
         try:
             openai_module = importlib.import_module("openai")
@@ -56,12 +58,16 @@ class AzureOpenAIClient:
                 base_url=f"{self.endpoint}/openai/v1",
                 api_key=self.api_key,
             )
+            self.last_status = "live"
+            self.last_error = None
             logger.info(
                 "AzureOpenAIClient initialized mode=live endpoint=%s deployment=%s",
                 self.endpoint,
                 self.deployment,
             )
         else:
+            self.last_status = "stub"
+            self.last_error = "missing_openai_config"
             logger.info(
                 "AzureOpenAIClient initialized mode=stub has_endpoint=%s has_api_key=%s deployment=%s sdk_available=%s",
                 bool(self.endpoint),
@@ -75,6 +81,8 @@ class AzureOpenAIClient:
         logger.info("AzureOpenAI analyze_coverage_report request=%s", payload)
 
         if self._azure_client is None:
+            self.last_status = "stub"
+            self.last_error = "missing_openai_config"
             response = self._build_stub_result(report)
             logger.info("AzureOpenAI analyze_coverage_report response_mode=stub response=%s", response.model_dump())
             return response
@@ -108,12 +116,17 @@ class AzureOpenAIClient:
                 report_id=report.report_id,
                 root_cause_summary=parsed["root_cause_summary"],
                 confidence=float(parsed["confidence"]),
+                mode="live",
                 hypotheses=parsed.get("hypotheses", []),
                 recommended_actions=parsed.get("recommended_actions", []),
             )
+            self.last_status = "live"
+            self.last_error = None
             logger.info("AzureOpenAI analyze_coverage_report response_mode=live response=%s", response.model_dump())
             return response
-        except Exception:
+        except Exception as exc:
+            self.last_status = "stub"
+            self.last_error = str(exc)
             logger.exception("Live Azure OpenAI call failed, falling back to stub result")
             response = self._build_stub_result(report)
             logger.info("AzureOpenAI analyze_coverage_report response_mode=stub_after_error response=%s", response.model_dump())
@@ -129,6 +142,7 @@ class AzureOpenAIClient:
                 "of the coverage issue in the current serving market."
             ),
             confidence=0.89,
+            mode="stub",
             hypotheses=[
                 {
                     "type": "outage",

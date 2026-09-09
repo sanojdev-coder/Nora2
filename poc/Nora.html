@@ -208,7 +208,10 @@
             langgraphStatus.classList.add("fallback");
           }
 
-          if (traceLines.some((line) => line.toLowerCase().includes("stub"))) {
+          const openAiLine = traceLines.find((line) => line.toLowerCase().includes("openai:"));
+          const openAiLower = openAiLine ? openAiLine.toLowerCase() : "";
+
+          if (openAiLower.includes("stub")) {
             openaiStatus.textContent = "OpenAI: stub";
             openaiStatus.classList.add("stub");
             stubInfo.classList.add("visible");

@@ -22,7 +22,10 @@ class ServiceNowMCPServer:
 
     def __init__(self):
         self.instance_url = os.getenv("SERVICENOW_INSTANCE_URL", "").strip().rstrip("/")
-        self.username = os.getenv("SERVICENOW_USERNAME", "").strip()
+        self.username = (
+            os.getenv("SERVICENOW_USERNAME", "").strip()
+            or os.getenv("SERVICENOW_CALLER_USERNAME", "").strip()
+        )
         self.password = os.getenv("SERVICENOW_PASSWORD", "").strip()
         verify_ssl_raw = os.getenv("SERVICENOW_VERIFY_SSL", "true").strip().lower()
         self.verify_ssl = verify_ssl_raw not in {"0", "false", "no"}
