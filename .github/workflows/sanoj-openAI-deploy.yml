@@ -74,6 +74,24 @@ jobs:
             fi
           done
 
+      - name: Purge soft-deleted Azure OpenAI account if present
+        run: |
+          DELETED_ACCOUNT=$(az cognitiveservices account show-deleted \
+            --location "${LOCATION}" \
+            --resource-group "${RESOURCE_GROUP_NAME}" \
+            --name "${OPENAI_ACCOUNT_NAME}" \
+            --query name --output tsv 2>/dev/null || true)
+          if [ -n "${DELETED_ACCOUNT}" ]; then
+            echo "Soft-deleted account '${DELETED_ACCOUNT}' found -> purging"
+            az cognitiveservices account purge \
+              --location "${LOCATION}" \
+              --resource-group "${RESOURCE_GROUP_NAME}" \
+              --name "${OPENAI_ACCOUNT_NAME}"
+            echo "Purged soft-deleted account."
+          else
+            echo "No soft-deleted account '${OPENAI_ACCOUNT_NAME}' to purge."
+          fi
+
       - name: Terraform Init
         run: terraform init
 
@@ -82,6 +100,8 @@ jobs:
           set -e
           SUBSCRIPTION_ID=$(az account show --query id -o tsv)
           RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          ACCOUNT_ID="${RG_ID}/providers/Microsoft.CognitiveServices/accounts/${OPENAI_ACCOUNT_NAME}"
+          DEPLOYMENT_ID="${ACCOUNT_ID}/deployments/${OPENAI_DEPLOYMENT_NAME}"
 
           if az group show --name "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
             if ! terraform state show azurerm_resource_group.main >/dev/null 2>&1; then
@@ -92,6 +112,31 @@ jobs:
             fi
           else
             echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+          if az cognitiveservices account show --name "${OPENAI_ACCOUNT_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
+            if ! terraform state show azurerm_cognitive_account.main >/dev/null 2>&1; then
+              echo "Cognitive account ${OPENAI_ACCOUNT_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_cognitive_account.main "${ACCOUNT_ID}"
+            else
+              echo "Cognitive account ${OPENAI_ACCOUNT_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Cognitive account ${OPENAI_ACCOUNT_NAME} not found -> Terraform will create it"
+          fi
+
+          if az cognitiveservices account deployment show \
+            --name "${OPENAI_ACCOUNT_NAME}" \
+            --resource-group "${RESOURCE_GROUP_NAME}" \
+            --deployment-name "${OPENAI_DEPLOYMENT_NAME}" >/dev/null 2>&1; then
+            if ! terraform state show azurerm_cognitive_deployment.main >/dev/null 2>&1; then
+              echo "Cognitive deployment ${OPENAI_DEPLOYMENT_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_cognitive_deployment.main "${DEPLOYMENT_ID}"
+            else
+              echo "Cognitive deployment ${OPENAI_DEPLOYMENT_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Cognitive deployment ${OPENAI_DEPLOYMENT_NAME} not found -> Terraform will create it"
           fi
 
       - name: Terraform Format Check
