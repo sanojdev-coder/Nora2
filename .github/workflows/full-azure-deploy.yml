@@ -33,6 +33,23 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Wait for resource group cleanup if stuck
+        run: |
+          for i in {1..12}; do
+            if az group exists --name "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
+              RG_STATE=$(az group show --name "${RESOURCE_GROUP_NAME}" --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+              if [ "${RG_STATE}" = "Succeeded" ] || [ "${RG_STATE}" = "NotFound" ]; then
+                echo "Resource group is ready for use."
+                break
+              fi
+              echo "Resource group is still in state: ${RG_STATE}. Waiting 30s..."
+              sleep 30
+            else
+              echo "Resource group not found. Proceeding."
+              break
+            fi
+          done
+
       - name: Terraform Init
         run: terraform init
 
