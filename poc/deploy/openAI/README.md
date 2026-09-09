@@ -16,7 +16,7 @@ terraform plan \
   -var="resource_group_name=RehnaResourceGroup" \
   -var="location=West US 3" \
   -var="openai_account_name=rehnaopenai" \
-  -var="openai_deployment_name=Namegpt-4.1-mini" \
+  -var="openai_deployment_name=gpt-4.1-mini" \
   -var="openai_model_name=gpt-4.1-mini" \
   -var="openai_model_version=2025-04-14"
 

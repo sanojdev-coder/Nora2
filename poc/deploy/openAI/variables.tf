@@ -40,7 +40,7 @@ variable "openai_sku_name" {
 variable "openai_deployment_name" {
   type        = string
   description = "Name of the Azure OpenAI model deployment"
-  default     = "Namegpt-4.1-mini"
+  default     = "gpt-4.1-mini"
 }
 
 variable "openai_model_name" {

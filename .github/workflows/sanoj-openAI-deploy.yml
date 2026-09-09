@@ -18,7 +18,7 @@ on:
       openai_deployment_name:
         description: "Azure OpenAI deployment name"
         required: false
-        default: "Namegpt-4.1-mini"
+        default: "gpt-4.1-mini"
       openai_model_name:
         description: "Model name to deploy"
         required: false
@@ -37,7 +37,7 @@ jobs:
       RESOURCE_GROUP_NAME: ${{ github.event.inputs.resource_group_name || 'SanojResourceGroup' }}
       LOCATION: ${{ github.event.inputs.location || 'West US 3' }}
       OPENAI_ACCOUNT_NAME: ${{ github.event.inputs.openai_account_name || 'sanojopenai' }}
-      OPENAI_DEPLOYMENT_NAME: ${{ github.event.inputs.openai_deployment_name || 'Namegpt-4.1-mini' }}
+      OPENAI_DEPLOYMENT_NAME: ${{ github.event.inputs.openai_deployment_name || 'gpt-4.1-mini' }}
       OPENAI_MODEL_NAME: ${{ github.event.inputs.openai_model_name || 'gpt-4.1-mini' }}
       OPENAI_MODEL_VERSION: ${{ github.event.inputs.openai_model_version || '2025-04-14' }}
 
