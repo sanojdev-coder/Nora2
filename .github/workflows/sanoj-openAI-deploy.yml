@@ -1,0 +1,124 @@
+name: Azure OpenAI Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: "Azure region"
+        required: false
+        default: "West US 3"
+      resource_group_name:
+        description: "Azure resource group name"
+        required: false
+        default: "SanojResourceGroup"
+      openai_account_name:
+        description: "Globally unique Azure OpenAI account name"
+        required: false
+        default: "sanojopenai"
+      openai_deployment_name:
+        description: "Azure OpenAI deployment name"
+        required: false
+        default: "Namegpt-4.1-mini"
+      openai_model_name:
+        description: "Model name to deploy"
+        required: false
+        default: "gpt-4.1-mini"
+      openai_model_version:
+        description: "Model version to deploy"
+        required: false
+        default: "2025-04-14"
+
+jobs:
+  create-openai-infra:
+    name: Create Azure OpenAI Infrastructure
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP_NAME: ${{ github.event.inputs.resource_group_name || 'SanojResourceGroup' }}
+      LOCATION: ${{ github.event.inputs.location || 'West US 3' }}
+      OPENAI_ACCOUNT_NAME: ${{ github.event.inputs.openai_account_name || 'sanojopenai' }}
+      OPENAI_DEPLOYMENT_NAME: ${{ github.event.inputs.openai_deployment_name || 'Namegpt-4.1-mini' }}
+      OPENAI_MODEL_NAME: ${{ github.event.inputs.openai_model_name || 'gpt-4.1-mini' }}
+      OPENAI_MODEL_VERSION: ${{ github.event.inputs.openai_model_version || '2025-04-14' }}
+
+    defaults:
+      run:
+        working-directory: ./poc/deploy/openAI
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Wait for resource group cleanup if stuck
+        run: |
+          for i in {1..12}; do
+            if az group exists --name "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
+              RG_STATE=$(az group show --name "${RESOURCE_GROUP_NAME}" --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+              if [ "${RG_STATE}" = "Succeeded" ] || [ "${RG_STATE}" = "NotFound" ]; then
+                echo "Resource group is ready for use."
+                break
+              fi
+              echo "Resource group is still in state: ${RG_STATE}. Waiting 30s..."
+              sleep 30
+            else
+              echo "Resource group not found. Proceeding."
+              break
+            fi
+          done
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check and import existing resources
+        run: |
+          set -e
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+
+          if az group show --name "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
+            if ! terraform state show azurerm_resource_group.main >/dev/null 2>&1; then
+              echo "Resource group ${RESOURCE_GROUP_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_resource_group.main "${RG_ID}"
+            else
+              echo "Resource group ${RESOURCE_GROUP_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="resource_group_name=${RESOURCE_GROUP_NAME}" \
+            -var="location=${LOCATION}" \
+            -var="openai_account_name=${OPENAI_ACCOUNT_NAME}" \
+            -var="openai_deployment_name=${OPENAI_DEPLOYMENT_NAME}" \
+            -var="openai_model_name=${OPENAI_MODEL_NAME}" \
+            -var="openai_model_version=${OPENAI_MODEL_VERSION}"
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var="resource_group_name=${RESOURCE_GROUP_NAME}" \
+            -var="location=${LOCATION}" \
+            -var="openai_account_name=${OPENAI_ACCOUNT_NAME}" \
+            -var="openai_deployment_name=${OPENAI_DEPLOYMENT_NAME}" \
+            -var="openai_model_name=${OPENAI_MODEL_NAME}" \
+            -var="openai_model_version=${OPENAI_MODEL_VERSION}"
+
+      - name: Show deployment outputs
+        run: terraform output -json
