@@ -241,58 +241,46 @@ jobs:
       - name: Install Azure Container Apps extension
         run: az extension add --name containerapp --yes
 
-      - name: Deploy image to Container App
+      - name: Deploy to Container App
         run: |
           REGISTRY_USERNAME=$(az acr credential show --name "${{ env.ACR_NAME }}" --query username -o tsv)
           REGISTRY_PASSWORD=$(az acr credential show --name "${{ env.ACR_NAME }}" --query "passwords[0].value" -o tsv)
 
-          echo "Registry username length: ${#REGISTRY_USERNAME}"
-          echo "Registry password length: ${#REGISTRY_PASSWORD}"
+          echo "Username length: ${#REGISTRY_USERNAME}"
+          echo "Password length: ${#REGISTRY_PASSWORD}"
 
           if [ -z "${REGISTRY_USERNAME}" ] || [ -z "${REGISTRY_PASSWORD}" ]; then
-            echo "ACR credentials are empty. Cannot deploy container app."
+            echo "ACR credentials are empty. Deployment cannot continue."
             exit 1
           fi
 
-          APP_EXISTS=false
           if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
-            APP_EXISTS=true
             PROVISIONING_STATE=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --query properties.provisioningState -o tsv)
-            echo "Current Container App provisioning state: ${PROVISIONING_STATE}"
 
             if [ "${PROVISIONING_STATE}" = "Failed" ]; then
-              echo "Container App is in Failed state. Deleting and recreating it."
+              echo "Container App is in Failed state. Deleting it first."
               az containerapp delete --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --yes
-              APP_EXISTS=false
+            else
+              az containerapp update \
+                --name "${{ env.CONTAINER_APP_NAME }}" \
+                --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+                --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
+                --set-env-vars "APP_ENV=production"
+              exit 0
             fi
           fi
 
-          if [ "${APP_EXISTS}" = "true" ]; then
-            az containerapp registry set \
-              --name "${{ env.CONTAINER_APP_NAME }}" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --server "${{ env.ACR_LOGIN_SERVER }}" \
-              --username "${REGISTRY_USERNAME}" \
-              --password "${REGISTRY_PASSWORD}"
-
-            az containerapp update \
-              --name "${{ env.CONTAINER_APP_NAME }}" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
-              --set-env-vars "APP_ENV=production"
-          else
-            az containerapp create \
-              --name "${{ env.CONTAINER_APP_NAME }}" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-              --environment "${{ env.CONTAINER_APP_ENVIRONMENT }}" \
-              --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
-              --ingress external \
-              --target-port 4021 \
-              --cpu 0.5 \
-              --memory 1Gi \
-              --min-replicas 0 \
-              --max-replicas 3 \
-              --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
-              --registry-username "${REGISTRY_USERNAME}" \
-              --registry-password "${REGISTRY_PASSWORD}"
-          fi
+          az containerapp create \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --environment "${{ env.CONTAINER_APP_ENVIRONMENT }}" \
+            --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
+            --ingress external \
+            --target-port 4021 \
+            --cpu 0.5 \
+            --memory 1Gi \
+            --min-replicas 0 \
+            --max-replicas 3 \
+            --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
+            --registry-username "${REGISTRY_USERNAME}" \
+            --registry-password "${REGISTRY_PASSWORD}"
