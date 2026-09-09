@@ -45,14 +45,18 @@ jobs:
       - name: Deploy image to Container App
         run: |
           if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
+            az containerapp registry set \
+              --name "${{ env.CONTAINER_APP_NAME }}" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --server "${{ env.ACR_LOGIN_SERVER }}" \
+              --username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
+              --password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+
             az containerapp update \
               --name "${{ env.CONTAINER_APP_NAME }}" \
               --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
               --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}" \
-              --set-env-vars "APP_ENV=production" \
-              --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
-              --registry-username "${{ steps.acr.outputs.REGISTRY_USERNAME }}" \
-              --registry-password "${{ steps.acr.outputs.REGISTRY_PASSWORD }}"
+              --set-env-vars "APP_ENV=production"
           else
             az containerapp create \
               --name "${{ env.CONTAINER_APP_NAME }}" \
