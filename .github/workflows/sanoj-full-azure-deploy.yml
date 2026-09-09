@@ -1,0 +1,280 @@
+name: Full Azure Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to build and deploy"
+        required: false
+        default: "v1"
+
+jobs:
+  create-acr-infra:
+    name: Create ACR Infrastructure
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP_NAME: SanojResourceGroup
+      ACR_NAME: sanojacr
+
+    defaults:
+      run:
+        working-directory: ./poc/deploy/acr
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Wait for resource group cleanup if stuck
+        run: |
+          for i in {1..12}; do
+            if az group exists --name "${RESOURCE_GROUP_NAME}" >/dev/null 2>&1; then
+              RG_STATE=$(az group show --name "${RESOURCE_GROUP_NAME}" --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+              if [ "${RG_STATE}" = "Succeeded" ] || [ "${RG_STATE}" = "NotFound" ]; then
+                echo "Resource group is ready for use."
+                break
+              fi
+              echo "Resource group is still in state: ${RG_STATE}. Waiting 30s..."
+              sleep 30
+            else
+              echo "Resource group not found. Proceeding."
+              break
+            fi
+          done
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check and Import Existing Resources
+        run: |
+          set -e
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          ACR_ID="${RG_ID}/providers/Microsoft.ContainerRegistry/registries/${ACR_NAME}"
+
+          if az group show --name "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_resource_group.main > /dev/null 2>&1; then
+              echo "Resource group ${RESOURCE_GROUP_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_resource_group.main "${RG_ID}"
+            else
+              echo "Resource group ${RESOURCE_GROUP_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+          if az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_container_registry.main > /dev/null 2>&1; then
+              echo "Container registry ${ACR_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_container_registry.main "${ACR_ID}"
+            else
+              echo "Container registry ${ACR_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Container registry ${ACR_NAME} not found -> Terraform will create it"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  create-container-infra:
+    name: Create Container App Infra
+    needs: create-acr-infra
+    runs-on: ubuntu-latest
+
+    env:
+      RESOURCE_GROUP_NAME: SanojResourceGroup
+      LOG_ANALYTICS_WORKSPACE_NAME: sanoj-containerapps-logs
+      CONTAINER_APP_ENVIRONMENT_NAME: sanoj-container-apps-env
+
+    defaults:
+      run:
+        working-directory: ./poc/deploy/containerapp
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Install Azure Container Apps extension
+        run: az extension add --name containerapp --yes
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Check and Import Existing Resources
+        run: |
+          set -e
+          SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+          RG_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP_NAME}"
+          WORKSPACE_ID="${RG_ID}/providers/Microsoft.OperationalInsights/workspaces/${LOG_ANALYTICS_WORKSPACE_NAME}"
+          CONTAINER_APP_ENV_ID="${RG_ID}/providers/Microsoft.App/managedEnvironments/${CONTAINER_APP_ENVIRONMENT_NAME}"
+
+          if az group show --name "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_resource_group.main > /dev/null 2>&1; then
+              echo "Resource group ${RESOURCE_GROUP_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_resource_group.main "${RG_ID}"
+            else
+              echo "Resource group ${RESOURCE_GROUP_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Resource group ${RESOURCE_GROUP_NAME} not found -> Terraform will create it"
+          fi
+
+          if az monitor log-analytics workspace show --workspace-name "${LOG_ANALYTICS_WORKSPACE_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_log_analytics_workspace.main > /dev/null 2>&1; then
+              echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_log_analytics_workspace.main "${WORKSPACE_ID}"
+            else
+              echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Log Analytics workspace ${LOG_ANALYTICS_WORKSPACE_NAME} not found -> Terraform will create it"
+          fi
+
+          if az containerapp env show --name "${CONTAINER_APP_ENVIRONMENT_NAME}" --resource-group "${RESOURCE_GROUP_NAME}" > /dev/null 2>&1; then
+            if ! terraform state show azurerm_container_app_environment.main > /dev/null 2>&1; then
+              echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} already exists -> importing into Terraform state"
+              terraform import azurerm_container_app_environment.main "${CONTAINER_APP_ENV_ID}"
+            else
+              echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} already managed by Terraform state"
+            fi
+          else
+            echo "Container App Environment ${CONTAINER_APP_ENVIRONMENT_NAME} not found -> Terraform will create it"
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  build-and-push-image:
+    name: Build and Push Docker Image
+    needs: create-container-infra
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name sanojacr
+
+      - name: Build Docker image
+        run: |
+          docker build -t sanojacr.azurecr.io/pythonapp:${{ github.event.inputs.image_tag || 'v1' }} -f Dockerfile .
+
+      - name: Push Docker image
+        run: |
+          docker push sanojacr.azurecr.io/pythonapp:${{ github.event.inputs.image_tag || 'v1' }}
+
+  deploy-container-app:
+    name: Deploy to Container App
+    needs: build-and-push-image
+    runs-on: ubuntu-latest
+
+    env:
+      AZURE_RESOURCE_GROUP: SanojResourceGroup
+      CONTAINER_APP_ENVIRONMENT: sanoj-container-apps-env
+      CONTAINER_APP_NAME: sanoj-nora-app
+      ACR_NAME: sanojacr
+      ACR_LOGIN_SERVER: sanojacr.azurecr.io
+      IMAGE_NAME: pythonapp
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || 'v1' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Enable ACR admin user
+        run: |
+          az acr update --name "${{ env.ACR_NAME }}" --admin-enabled true
+
+      - name: Install Azure Container Apps extension
+        run: az extension add --name containerapp --yes
+
+      - name: Deploy to Container App
+        run: |
+          REGISTRY_USERNAME=$(az acr credential show --name "${{ env.ACR_NAME }}" --query username -o tsv)
+          REGISTRY_PASSWORD=$(az acr credential show --name "${{ env.ACR_NAME }}" --query "passwords[0].value" -o tsv)
+
+          echo "Username length: ${#REGISTRY_USERNAME}"
+          echo "Password length: ${#REGISTRY_PASSWORD}"
+
+          if [ -z "${REGISTRY_USERNAME}" ] || [ -z "${REGISTRY_PASSWORD}" ]; then
+            echo "ACR credentials are empty. Deployment cannot continue."
+            exit 1
+          fi
+
+          if az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" >/dev/null 2>&1; then
+            PROVISIONING_STATE=$(az containerapp show --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --query properties.provisioningState -o tsv)
+
+            if [ "${PROVISIONING_STATE}" = "Failed" ]; then
+              echo "Container App is in Failed state. Deleting it first."
+              az containerapp delete --name "${{ env.CONTAINER_APP_NAME }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" --yes
+            else
+              az containerapp update \
+                --name "${{ env.CONTAINER_APP_NAME }}" \
+                --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+                --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
+                --set-env-vars "APP_ENV=production"
+              exit 0
+            fi
+          fi
+
+          az containerapp create \
+            --name "${{ env.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --environment "${{ env.CONTAINER_APP_ENVIRONMENT }}" \
+            --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
+            --ingress external \
+            --target-port 4021 \
+            --cpu 0.5 \
+            --memory 1Gi \
+            --min-replicas 0 \
+            --max-replicas 3 \
+            --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
+            --registry-username "${REGISTRY_USERNAME}" \
+            --registry-password "${REGISTRY_PASSWORD}"
