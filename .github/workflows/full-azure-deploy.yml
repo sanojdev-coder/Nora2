@@ -232,12 +232,6 @@ jobs:
         run: |
           az acr update --name "${{ env.ACR_NAME }}" --admin-enabled true
 
-      - name: Get ACR admin credentials
-        id: acr
-        run: |
-          echo "REGISTRY_USERNAME=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query username -o tsv)" >> "$GITHUB_OUTPUT"
-          echo "REGISTRY_PASSWORD=$(az acr credential show --name \"${{ env.ACR_NAME }}\" --query \"passwords[0].value\" -o tsv)" >> "$GITHUB_OUTPUT"
-
       - name: Install Azure Container Apps extension
         run: az extension add --name containerapp --yes
 
