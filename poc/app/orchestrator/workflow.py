@@ -119,6 +119,22 @@ class CoverageDiagnosticsWorkflow:
         logger.info("Workflow node compose_response response=%s", response)
         return response
 
+    @staticmethod
+    def _servicenow_trace_line(ticket_result: ServiceNowIssueResult | None) -> str:
+        """Build a human-readable execution-path line from the ticket node result."""
+        if ticket_result is None:
+            return "servicenow: not invoked"
+        mode = getattr(ticket_result, "mode", "unknown")
+        if mode == "decision":
+            return "servicenow: skipped (policy did not require a ticket)"
+        if mode == "stub":
+            return "servicenow: stub fallback (credentials not configured)"
+        if ticket_result.success:
+            number = ticket_result.number or "n/a"
+            return f"servicenow: live ticket created ({number})"
+        first_line = (ticket_result.message or "unknown error").splitlines()[0]
+        return f"servicenow: live create failed ({first_line[:120]})"
+
     def validate_report(self, report: CoverageAssessmentReport) -> bool:
         logger.info("Workflow validate_report request=%s", report.model_dump())
         required_fields = [
@@ -150,5 +166,12 @@ class CoverageDiagnosticsWorkflow:
                 "langgraph: invoked",
                 "openai: live call" if self.rca_service.ai_client._azure_client is not None else "openai: stub fallback",
             ]
+
+        execution_path = list(response.execution_path)
+        servicenow_line = self._servicenow_trace_line(state.get("ticket_result"))
+        if not any(line.startswith("servicenow:") for line in execution_path):
+            execution_path.append(servicenow_line)
+        response.execution_path = execution_path
+
         logger.info("Workflow run_langgraph response=%s", response.model_dump())
         return response
