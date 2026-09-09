@@ -2,9 +2,32 @@ import os
 import json
 import importlib
 import logging
+from pathlib import Path
 from typing import Any
 
 from app.mcp.tool_schema import CoverageAssessmentInput, RCAAnalysisToolResult
+
+
+def _load_dotenv_if_present() -> None:
+    """Load environment variables from the local .env file when present."""
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.exists():
+        return
+
+    try:
+        with env_file.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    except OSError:
+        logger = logging.getLogger(__name__)
+        logger.warning("Could not read .env file at %s", env_file)
+
+
+_load_dotenv_if_present()
 
 
 logger = logging.getLogger(__name__)

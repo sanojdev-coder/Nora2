@@ -1,9 +1,12 @@
 import pytest
 import logging
 import sys
+from pathlib import Path
 from pydantic import ValidationError
 
 import app.orchestrator.workflow as workflow_module
+from app.mcp.azure_openai_client import AzureOpenAIClient
+from app.models.coverage import CoverageAssessmentReport
 from app.orchestrator.workflow import CoverageDiagnosticsWorkflow
 from app.models.coverage import CoverageAssessmentReport
 from app.models.rca import RCAAnalysisResult
@@ -72,6 +75,47 @@ def test_workflow_builds_langgraph_graph():
 
     assert workflow.graph is not None
     assert hasattr(workflow, "run_langgraph")
+
+
+def test_workflow_reports_execution_path():
+    workflow = CoverageDiagnosticsWorkflow()
+    report = CoverageAssessmentReport(
+        report_id="CAR-303",
+        subscriber_id="sub-303",
+        coverage_status="degraded",
+        service_availability="partial",
+        outage_detected=True,
+        serving_market="ATL-01",
+        roaming_state="home",
+        registration_state="registered",
+        observations=["coverage degradation"],
+    )
+
+    result = workflow.run(report)
+
+    assert hasattr(result, "execution_path")
+    assert any("langgraph" in step.lower() for step in result.execution_path)
+    assert any("openai" in step.lower() for step in result.execution_path)
+
+
+def test_azure_openai_client_loads_settings_from_dotenv(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "AZURE_OPENAI_ENDPOINT=https://example.services.ai.azure.com\n"
+        "AZURE_OPENAI_API_KEY=test-key\n"
+        "AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_DEPLOYMENT", raising=False)
+
+    client = AzureOpenAIClient()
+
+    assert client.endpoint == "https://example.services.ai.azure.com"
+    assert client.api_key == "test-key"
+    assert client.deployment == "gpt-4.1-mini"
 
 
 def test_workflow_runs_with_langgraph_mode_on(monkeypatch, caplog):

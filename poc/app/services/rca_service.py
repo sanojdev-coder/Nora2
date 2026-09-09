@@ -35,11 +35,17 @@ class RCAService:
         llm_result = self.ai_client.analyze_coverage_report(tool_input)
         logger.info("RCA analyze llm_result=%s", llm_result.model_dump())
 
+        execution_path = [
+            "langgraph: invoked",
+            "openai: live call" if self.ai_client._azure_client is not None else "openai: stub fallback",
+        ]
+
         response = RCAAnalysisResult(
             report_id=llm_result.report_id,
             root_cause_summary=llm_result.root_cause_summary,
             confidence=llm_result.confidence,
             recommended_actions=llm_result.recommended_actions,
+            execution_path=execution_path,
         )
         logger.info("RCA analyze response=%s", response.model_dump())
         return response

@@ -21,6 +21,7 @@ def coverage_diagnostics(report: CoverageAssessmentReport):
         "root_cause_summary": result.root_cause_summary,
         "confidence": result.confidence,
         "recommended_actions": result.recommended_actions,
+        "execution_path": getattr(result, "execution_path", []),
     }
     logger.info("API coverage_diagnostics response=%s", response)
     return response

@@ -145,5 +145,10 @@ class CoverageDiagnosticsWorkflow:
 
         state = self.graph.invoke({"report": report})
         response = state["rca_result"]
+        if not getattr(response, "execution_path", None):
+            response.execution_path = [
+                "langgraph: invoked",
+                "openai: live call" if self.rca_service.ai_client._azure_client is not None else "openai: stub fallback",
+            ]
         logger.info("Workflow run_langgraph response=%s", response.model_dump())
         return response

@@ -40,6 +40,81 @@
         background: #1d4ed8;
       }
 
+      label {
+        display: block;
+        margin-top: 18px;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0 18px;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        border: 2px solid #0f172a;
+      }
+
+      .status-badge.langgraph {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+
+      .status-badge.langgraph.fallback {
+        background: #fef3c7;
+        color: #b45309;
+      }
+
+      .status-badge.openai {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-badge.openai.stub {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        background: #111827;
+        color: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 14px;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+
+      .info-box {
+        display: none;
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #9a4d00;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .info-box.visible {
+        display: block;
+      }
+
       pre {
         background: #111827;
         color: #e5e7eb;
@@ -56,6 +131,20 @@
     <div class="container">
       <h2>Coverage Diagnostics Workflow</h2>
       <button id="runBtn">Run workflow</button>
+
+      <div class="status-row">
+        <div id="langgraphStatus" class="status-badge langgraph">LangGraph: pending</div>
+        <div id="openaiStatus" class="status-badge openai">OpenAI: pending</div>
+      </div>
+
+      <label for="executionTrace">Execution path</label>
+      <textarea id="executionTrace" readonly>Waiting for workflow execution...</textarea>
+
+      <div id="stubInfo" class="info-box">
+        OpenAI is in stub mode because the Azure endpoint, API key, or deployment name is not configured in the environment.
+        Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT to use the live Azure OpenAI path.
+      </div>
+
       <pre id="result">Click the button to run the workflow.</pre>
     </div>
 
@@ -73,10 +162,27 @@
       };
 
       const resultBox = document.getElementById("result");
+      const executionTrace = document.getElementById("executionTrace");
+      const langgraphStatus = document.getElementById("langgraphStatus");
+      const openaiStatus = document.getElementById("openaiStatus");
+      const stubInfo = document.getElementById("stubInfo");
       const runBtn = document.getElementById("runBtn");
+
+      function applyStatusState() {
+        langgraphStatus.textContent = "LangGraph: enabled";
+        langgraphStatus.classList.remove("fallback");
+
+        openaiStatus.textContent = "OpenAI: live";
+        openaiStatus.classList.remove("stub");
+        stubInfo.classList.remove("visible");
+      }
 
       runBtn.addEventListener("click", async () => {
         resultBox.textContent = "Running workflow...";
+        executionTrace.value = "Running workflow...";
+        langgraphStatus.textContent = "LangGraph: checking...";
+        openaiStatus.textContent = "OpenAI: checking...";
+        stubInfo.classList.remove("visible");
 
         try {
           const response = await fetch("/coverage-diagnostics", {
@@ -92,11 +198,43 @@
           }
 
           const data = await response.json();
+          const traceLines = Array.isArray(data.execution_path) ? data.execution_path : [];
+
+          if (traceLines.some((line) => line.toLowerCase().includes("langgraph"))) {
+            langgraphStatus.textContent = "LangGraph: enabled";
+            langgraphStatus.classList.remove("fallback");
+          } else {
+            langgraphStatus.textContent = "LangGraph: fallback";
+            langgraphStatus.classList.add("fallback");
+          }
+
+          if (traceLines.some((line) => line.toLowerCase().includes("stub"))) {
+            openaiStatus.textContent = "OpenAI: stub";
+            openaiStatus.classList.add("stub");
+            stubInfo.classList.add("visible");
+          } else {
+            openaiStatus.textContent = "OpenAI: live";
+            openaiStatus.classList.remove("stub");
+            stubInfo.classList.remove("visible");
+          }
+
+          executionTrace.value = traceLines.length
+            ? traceLines.join("\n")
+            : "No execution path returned by the backend.";
+
           resultBox.textContent = JSON.stringify(data, null, 2);
         } catch (error) {
+          langgraphStatus.textContent = "LangGraph: error";
+          langgraphStatus.classList.add("fallback");
+          openaiStatus.textContent = "OpenAI: error";
+          openaiStatus.classList.add("stub");
+          stubInfo.classList.add("visible");
+          executionTrace.value = "Error while invoking workflow.\n" + error.message;
           resultBox.textContent = "Error: " + error.message + "\n\nMake sure your FastAPI app is running on http://127.0.0.1:4021";
         }
       });
+
+      applyStatusState();
     </script>
   </body>
 </html>
