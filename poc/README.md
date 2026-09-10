@@ -332,3 +332,38 @@ If you want, I can do the next exact step and move the POC from stubbed logic to
   "subscriptionId": "f3c58ce1-f6d3-4466-9593-438f0a6228ad",
   "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 }
+
+
+az ad sp create-for-rbac --name "github-actions-sp" --role contributor --scopes /subscriptions/f3c58ce1-f6d3-4466-9593-438f0a6228ad --sdk-auth
+
+Display name
+:
+nora-app
+Application (client) ID
+:
+d705fab1-44e1-4aba-b48f-2a4f2d3da090
+Object ID
+:
+8c7332c2-a43d-4f74-b6ed-8e514c1c1cb4
+Directory (tenant) ID
+:
+05256b61-4fa5-4b04-90b5-c75b52d4272e
+Supported account types
+:
+My organization only
+Client credentials
+:
+Add a certificate or secret
+Redirect URIs
+:
+Add a Redirect URI
+Application ID URI
+:
+Add an Application ID URI
+Managed application in local directory
+:
+nora-app
+State
+:
+Activated
+
