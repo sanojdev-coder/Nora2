@@ -1,7 +1,7 @@
 variable "resource_group_name" {
   type        = string
   description = "Name of the Azure Resource Group"
-  default     = "RehnaResourceGroup"
+  default     = "SanojResourceGroup"
 }
 
 variable "location" {
@@ -22,7 +22,7 @@ variable "tags" {
 variable "openai_account_name" {
   type        = string
   description = "Globally unique Azure OpenAI account name"
-  default     = "rehnaopenai"
+  default     = "sanojopenai"
 }
 
 variable "openai_kind" {
