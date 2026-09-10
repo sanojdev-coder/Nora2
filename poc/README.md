@@ -326,3 +326,9 @@ The current implementation centers on:
 - `ticket_service.py` for decision policy and request shaping
 
 If you want, I can do the next exact step and move the POC from stubbed logic to a real Azure OpenAI integration skeleton with environment config and test coverage.
+{
+  "clientId": "11111111-2222-3333-4444-555555555555",
+  "clientSecret": "<client-secret-value>",
+  "subscriptionId": "f3c58ce1-f6d3-4466-9593-438f0a6228ad",
+  "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+}
