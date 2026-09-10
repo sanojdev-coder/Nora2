@@ -233,9 +233,16 @@ jobs:
           az acr update --name "${{ env.ACR_NAME }}" --admin-enabled true
 
       - name: Install Azure Container Apps extension
-        run: az extension add --name containerapp --yes
+        run: az extension add --name containerapp --upgrade --yes
 
       - name: Deploy to Container App
+        env:
+          SERVICENOW_INSTANCE_URL: https://dev428031.service-now.com
+          SERVICENOW_CALLER_USERNAME: admin
+          SERVICENOW_USERNAME: admin
+          SERVICENOW_PASSWORD: ${{ secrets.SERVICENOW_PASSWORD }}
+          SERVICENOW_VERIFY_SSL: "false"
+          SERVICENOW_TIMEOUT_SECONDS: "20"
         run: |
           REGISTRY_USERNAME=$(az acr credential show --name "${{ env.ACR_NAME }}" --query username -o tsv)
           REGISTRY_PASSWORD=$(az acr credential show --name "${{ env.ACR_NAME }}" --query "passwords[0].value" -o tsv)
@@ -259,13 +266,13 @@ jobs:
                 --name "${{ env.CONTAINER_APP_NAME }}" \
                 --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
                 --image "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}" \
-                --set-env-vars "APP_ENV=production" \
-                  "SERVICENOW_INSTANCE_URL=https://dev428031.service-now.com" \
-                  "SERVICENOW_CALLER_USERNAME=admin" \
-                  "SERVICENOW_USERNAME=admin" \
-                  "SERVICENOW_PASSWORD=Li0yf*FB-y78" \
-                  "SERVICENOW_VERIFY_SSL=false" \
-                  "SERVICENOW_TIMEOUT_SECONDS=20"
+                --set-env-vars APP_ENV=production \
+                  SERVICENOW_INSTANCE_URL="${SERVICENOW_INSTANCE_URL}" \
+                  SERVICENOW_CALLER_USERNAME="${SERVICENOW_CALLER_USERNAME}" \
+                  SERVICENOW_USERNAME="${SERVICENOW_USERNAME}" \
+                  SERVICENOW_PASSWORD="${SERVICENOW_PASSWORD}" \
+                  SERVICENOW_VERIFY_SSL="${SERVICENOW_VERIFY_SSL}" \
+                  SERVICENOW_TIMEOUT_SECONDS="${SERVICENOW_TIMEOUT_SECONDS}"
               exit 0
             fi
           fi
@@ -284,10 +291,10 @@ jobs:
             --registry-server "${{ env.ACR_LOGIN_SERVER }}" \
             --registry-username "${REGISTRY_USERNAME}" \
             --registry-password "${REGISTRY_PASSWORD}" \
-            --set-env-vars "APP_ENV=production" \
-              "SERVICENOW_INSTANCE_URL=https://dev428031.service-now.com" \
-              "SERVICENOW_CALLER_USERNAME=admin" \
-              "SERVICENOW_USERNAME=admin" \
-              "SERVICENOW_PASSWORD=Li0yf*FB-y78" \
-              "SERVICENOW_VERIFY_SSL=false" \
-              "SERVICENOW_TIMEOUT_SECONDS=20"
+            --set-env-vars APP_ENV=production \
+              SERVICENOW_INSTANCE_URL="${SERVICENOW_INSTANCE_URL}" \
+              SERVICENOW_CALLER_USERNAME="${SERVICENOW_CALLER_USERNAME}" \
+              SERVICENOW_USERNAME="${SERVICENOW_USERNAME}" \
+              SERVICENOW_PASSWORD="${SERVICENOW_PASSWORD}" \
+              SERVICENOW_VERIFY_SSL="${SERVICENOW_VERIFY_SSL}" \
+              SERVICENOW_TIMEOUT_SECONDS="${SERVICENOW_TIMEOUT_SECONDS}"
