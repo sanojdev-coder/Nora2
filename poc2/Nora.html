@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coverage Diagnostics UI</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f5f7fb;
+        margin: 0;
+        padding: 40px 20px;
+      }
+
+      .container {
+        max-width: 780px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        padding: 24px;
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #1f2937;
+      }
+
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #1d4ed8;
+      }
+
+      label {
+        display: block;
+        margin-top: 18px;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0 18px;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        border: 2px solid #0f172a;
+      }
+
+      .status-badge.langgraph {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+
+      .status-badge.langgraph.fallback {
+        background: #fef3c7;
+        color: #b45309;
+      }
+
+      .status-badge.openai {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-badge.openai.stub {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      .status-badge.servicenow {
+        background: #ede9fe;
+        color: #6d28d9;
+      }
+
+      .status-badge.servicenow.stub {
+        background: #f3f4f6;
+        color: #374151;
+      }
+
+      .status-badge.servicenow.skipped {
+        background: #fef3c7;
+        color: #b45309;
+      }
+
+      .status-badge.servicenow.error {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        background: #111827;
+        color: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 14px;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+
+      .info-box {
+        display: none;
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        color: #9a4d00;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .info-box.visible {
+        display: block;
+      }
+
+      pre {
+        background: #111827;
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        overflow: auto;
+        white-space: pre-wrap;
+        margin-top: 20px;
+        min-height: 220px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Coverage Diagnostics Workflow</h2>
+      <button id="runBtn">Run workflow</button>
+
+      <div class="status-row">
+        <div id="langgraphStatus" class="status-badge langgraph">LangGraph: pending</div>
+        <div id="openaiStatus" class="status-badge openai">OpenAI: pending</div>
+        <div id="servicenowStatus" class="status-badge servicenow">ServiceNow: pending</div>
+      </div>
+
+      <label for="executionTrace">Execution path</label>
+      <textarea id="executionTrace" readonly>Waiting for workflow execution...</textarea>
+
+      <div id="stubInfo" class="info-box">
+        OpenAI is in stub mode because the Azure endpoint, API key, or deployment name is not configured in the environment.
+        Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT to use the live Azure OpenAI path.
+      </div>
+
+      <pre id="result">Click the button to run the workflow.</pre>
+    </div>
+
+    <script>
+      const sampleReport = {
+        report_id: "CAR-202",
+        subscriber_id: "sub-202",
+        coverage_status: "degraded",
+        service_availability: "partial",
+        outage_detected: true,
+        serving_market: "ATL-01",
+        roaming_state: "home",
+        registration_state: "registered",
+        observations: ["coverage degradation", "regional outage"]
+      };
+
+      const resultBox = document.getElementById("result");
+      const executionTrace = document.getElementById("executionTrace");
+      const langgraphStatus = document.getElementById("langgraphStatus");
+      const openaiStatus = document.getElementById("openaiStatus");
+      const servicenowStatus = document.getElementById("servicenowStatus");
+      const stubInfo = document.getElementById("stubInfo");
+      const runBtn = document.getElementById("runBtn");
+
+      function applyStatusState() {
+        langgraphStatus.textContent = "LangGraph: pending";
+        langgraphStatus.classList.remove("fallback");
+
+        openaiStatus.textContent = "OpenAI: pending";
+        openaiStatus.classList.remove("stub");
+        stubInfo.classList.remove("visible");
+
+        servicenowStatus.textContent = "ServiceNow: pending";
+        servicenowStatus.classList.remove("stub", "skipped", "error");
+      }
+
+      runBtn.addEventListener("click", async () => {
+        resultBox.textContent = "Running workflow...";
+        executionTrace.value = "Running workflow...";
+        langgraphStatus.textContent = "LangGraph: checking...";
+        openaiStatus.textContent = "OpenAI: checking...";
+        servicenowStatus.textContent = "ServiceNow: checking...";
+        servicenowStatus.classList.remove("stub", "skipped", "error");
+        stubInfo.classList.remove("visible");
+
+        try {
+          const response = await fetch("/coverage-diagnostics", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(sampleReport)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          const traceLines = Array.isArray(data.execution_path) ? data.execution_path : [];
+
+          if (traceLines.some((line) => line.toLowerCase().includes("langgraph"))) {
+            langgraphStatus.textContent = "LangGraph: enabled";
+            langgraphStatus.classList.remove("fallback");
+          } else {
+            langgraphStatus.textContent = "LangGraph: fallback";
+            langgraphStatus.classList.add("fallback");
+          }
+
+          const openAiLine = traceLines.find((line) => line.toLowerCase().includes("openai:"));
+          const openAiLower = openAiLine ? openAiLine.toLowerCase() : "";
+
+          if (openAiLower.includes("stub")) {
+            openaiStatus.textContent = "OpenAI: stub";
+            openaiStatus.classList.add("stub");
+            stubInfo.classList.add("visible");
+          } else {
+            openaiStatus.textContent = "OpenAI: live";
+            openaiStatus.classList.remove("stub");
+            stubInfo.classList.remove("visible");
+          }
+
+          const snLine = traceLines.find((line) => line.toLowerCase().includes("servicenow:"));
+          servicenowStatus.classList.remove("stub", "skipped", "error");
+          if (!snLine) {
+            servicenowStatus.textContent = "ServiceNow: n/a";
+          } else {
+            const sn = snLine.toLowerCase();
+            if (sn.includes("skipped")) {
+              servicenowStatus.textContent = "ServiceNow: skipped";
+              servicenowStatus.classList.add("skipped");
+            } else if (sn.includes("stub")) {
+              servicenowStatus.textContent = "ServiceNow: stub";
+              servicenowStatus.classList.add("stub");
+            } else if (sn.includes("failed") || sn.includes("error")) {
+              servicenowStatus.textContent = "ServiceNow: failed";
+              servicenowStatus.classList.add("error");
+            } else {
+              servicenowStatus.textContent = "ServiceNow: live";
+            }
+          }
+
+          executionTrace.value = traceLines.length
+            ? traceLines.join("\n")
+            : "No execution path returned by the backend.";
+
+          resultBox.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          langgraphStatus.textContent = "LangGraph: error";
+          langgraphStatus.classList.add("fallback");
+          openaiStatus.textContent = "OpenAI: error";
+          openaiStatus.classList.add("stub");
+          servicenowStatus.textContent = "ServiceNow: error";
+          servicenowStatus.classList.add("error");
+          stubInfo.classList.add("visible");
+          executionTrace.value = "Error while invoking workflow.\n" + error.message;
+          resultBox.textContent = "Error: " + error.message + "\n\nMake sure your FastAPI app is running on http://127.0.0.1:4021";
+        }
+      });
+
+      applyStatusState();
+    </script>
+  </body>
+</html>

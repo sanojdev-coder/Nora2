@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: NORA Coverage Diagnostics POC API
+  version: 1.0.0
+  description: Static workflow POC for coverage diagnostics with RCA and MCP-backed reasoning.
+paths:
+  /coverage-diagnostics:
+    post:
+      summary: Run the static coverage diagnostics workflow
+      operationId: runCoverageDiagnostics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoverageAssessmentReport'
+      responses:
+        '200':
+          description: Coverage diagnostics result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageDiagnosticsResponse'
+components:
+  schemas:
+    CoverageAssessmentReport:
+      type: object
+      required:
+        - report_id
+        - subscriber_id
+        - coverage_status
+        - service_availability
+        - outage_detected
+        - serving_market
+        - roaming_state
+        - registration_state
+      properties:
+        report_id:
+          type: string
+        subscriber_id:
+          type: string
+        coverage_status:
+          type: string
+        service_availability:
+          type: string
+        outage_detected:
+          type: boolean
+        serving_market:
+          type: string
+        roaming_state:
+          type: string
+        registration_state:
+          type: string
+        observations:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+          nullable: true
+    CoverageDiagnosticsResponse:
+      type: object
+      required:
+        - report_id
+        - root_cause_summary
+        - confidence
+        - recommended_actions
+      properties:
+        report_id:
+          type: string
+        root_cause_summary:
+          type: string
+        confidence:
+          type: number
+          format: float
+        recommended_actions:
+          type: array
+          items:
+            type: string
