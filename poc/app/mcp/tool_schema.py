@@ -14,6 +14,7 @@ class CoverageAssessmentInput(BaseModel):
     registration_state: str = Field(..., min_length=1)
     observations: List[str] = Field(default_factory=list)
     notes: str | None = None
+    subscriber_operational_context: dict | None = None
 
 
 class RCAHypothesis(BaseModel):

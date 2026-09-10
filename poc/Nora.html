@@ -40,6 +40,16 @@
         background: #1d4ed8;
       }
 
+      select {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        font-size: 15px;
+        background: #ffffff;
+        box-sizing: border-box;
+      }
+
       label {
         display: block;
         margin-top: 18px;
@@ -150,7 +160,11 @@
   <body>
     <div class="container">
       <h2>Coverage Diagnostics Workflow</h2>
-      <button id="runBtn">Run workflow</button>
+
+      <label for="subscriberSelect">Subscriber ID</label>
+      <select id="subscriberSelect" aria-label="Select subscriber ID"></select>
+
+      <button id="runBtn" style="margin-top: 18px;">Run workflow</button>
 
       <div class="status-row">
         <div id="langgraphStatus" class="status-badge langgraph">LangGraph: pending</div>
@@ -170,17 +184,40 @@
     </div>
 
     <script>
-      const sampleReport = {
-        report_id: "CAR-202",
-        subscriber_id: "sub-202",
-        coverage_status: "degraded",
-        service_availability: "partial",
-        outage_detected: true,
-        serving_market: "ATL-01",
-        roaming_state: "home",
-        registration_state: "registered",
-        observations: ["coverage degradation", "regional outage"]
-      };
+      const subscriberSelect = document.getElementById("subscriberSelect");
+
+      function buildSubscriberOptions() {
+        const options = [];
+        for (let i = 201; i <= 210; i += 1) {
+          options.push(`sub-${i}`);
+        }
+        return options;
+      }
+
+      function populateSubscriberOptions() {
+        const values = buildSubscriberOptions();
+        values.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          subscriberSelect.appendChild(option);
+        });
+        subscriberSelect.value = values[1] || values[0];
+      }
+
+      function buildSampleReport() {
+        return {
+          report_id: "CAR-202",
+          subscriber_id: subscriberSelect.value,
+          coverage_status: "degraded",
+          service_availability: "partial",
+          outage_detected: true,
+          serving_market: "ATL-01",
+          roaming_state: "home",
+          registration_state: "registered",
+          observations: ["coverage degradation", "regional outage"]
+        };
+      }
 
       const resultBox = document.getElementById("result");
       const executionTrace = document.getElementById("executionTrace");
@@ -212,12 +249,13 @@
         stubInfo.classList.remove("visible");
 
         try {
+          const requestBody = buildSampleReport();
           const response = await fetch("/coverage-diagnostics", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
-            body: JSON.stringify(sampleReport)
+            body: JSON.stringify(requestBody)
           });
 
           if (!response.ok) {
@@ -268,11 +306,40 @@
             }
           }
 
-          executionTrace.value = traceLines.length
-            ? traceLines.join("\n")
-            : "No execution path returned by the backend.";
+          const formattedTrace = traceLines
+            .filter((line) => line.toLowerCase().includes("langgraph") || line.toLowerCase().includes("openai:") || line.toLowerCase().includes("servicenow:"))
+            .map((line) => {
+              const lower = line.toLowerCase();
+              if (!lower.includes("openai: request=") && !lower.includes("openai: response=") && !lower.includes("servicenow:")) {
+                return line;
+              }
 
-          resultBox.textContent = JSON.stringify(data, null, 2);
+              if (lower.includes("openai: request=") || lower.includes("openai: response=")) {
+                const payloadText = line.split("=", 2)[1] || "{}";
+                try {
+                  const parsed = JSON.parse(payloadText);
+                  return `${line.split("=", 1)[0]}=\n${JSON.stringify(parsed, null, 2)}`;
+                } catch (error) {
+                  return line;
+                }
+              }
+              return line;
+            });
+
+          if (formattedTrace.length) {
+            executionTrace.value = formattedTrace.join("\n\n");
+          } else if (!executionTrace.value || executionTrace.value === "Waiting for workflow execution..." || executionTrace.value === "Running workflow...") {
+            executionTrace.value = "";
+          }
+
+          const cleanResponse = {
+            report_id: data.report_id,
+            root_cause_summary: data.root_cause_summary,
+            confidence: data.confidence,
+            mode: data.mode,
+            recommended_actions: data.recommended_actions,
+          };
+          resultBox.textContent = JSON.stringify(cleanResponse, null, 2);
         } catch (error) {
           langgraphStatus.textContent = "LangGraph: error";
           langgraphStatus.classList.add("fallback");
@@ -286,6 +353,7 @@
         }
       });
 
+      populateSubscriberOptions();
       applyStatusState();
     </script>
   </body>

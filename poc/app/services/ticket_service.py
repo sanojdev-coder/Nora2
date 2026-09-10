@@ -1,10 +1,12 @@
 import json
 import logging
+from datetime import datetime, timezone
 
 from app.mcp.servicenow_mcp_server import ServiceNowMCPServer
 from app.mcp.tool_schema import ServiceNowCreateIssueInput, ServiceNowIssueResult
 from app.models.coverage import CoverageAssessmentReport
 from app.models.rca import RCAAnalysisResult
+from app.services.ticket_history_repository import TicketHistoryRepository
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 class TicketService:
     def __init__(self):
         self.server = ServiceNowMCPServer()
+        self.ticket_history = TicketHistoryRepository()
 
     def should_create_ticket(self, report: CoverageAssessmentReport, rca_result: RCAAnalysisResult) -> bool:
         logger.info(
@@ -53,5 +56,14 @@ class TicketService:
             subcategory="performance",
         )
         response = self.server.create_issue(request)
+        if response.success and response.number:
+            self.ticket_history.save_ticket_record(
+                report_id=report.report_id,
+                subscriber_id=report.subscriber_id,
+                ticket_id=response.number,
+                ticket_timestamp=datetime.now(timezone.utc).isoformat(),
+                status="open",
+                serving_market=report.serving_market,
+            )
         logger.info("TicketService create_ticket response=%s", response.model_dump())
         return response

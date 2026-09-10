@@ -15,6 +15,23 @@ class CoverageAssessmentReport(BaseModel):
     observations: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
 
+    @field_validator("subscriber_id")
+    @classmethod
+    def validate_subscriber_id(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped.startswith("sub-"):
+            raise ValueError("subscriber_id must be in the allowed range sub-201 to sub-210")
+
+        try:
+            num = int(stripped.split("-")[-1])
+        except ValueError as exc:
+            raise ValueError("subscriber_id must be in the allowed range sub-201 to sub-210") from exc
+
+        if not 201 <= num <= 210:
+            raise ValueError("subscriber_id must be in the allowed range sub-201 to sub-210")
+
+        return stripped
+
     @field_validator("observations")
     @classmethod
     def validate_observations(cls, value):

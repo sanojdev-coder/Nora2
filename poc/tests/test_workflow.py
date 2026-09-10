@@ -1,3 +1,4 @@
+import json
 import pytest
 import logging
 import sys
@@ -18,12 +19,40 @@ REAL_LANGGRAPH_SKIP_REASON = (
 )
 
 
+def test_coverage_report_validates_allowed_subscriber_range():
+    valid = CoverageAssessmentReport(
+        report_id="CAR-201",
+        subscriber_id="sub-202",
+        coverage_status="degraded",
+        service_availability="partial",
+        outage_detected=True,
+        serving_market="ATL-01",
+        roaming_state="home",
+        registration_state="registered",
+        observations=["coverage degradation"],
+    )
+    assert valid.subscriber_id == "sub-202"
+
+    with pytest.raises(ValueError, match="sub-201.*sub-210"):
+        CoverageAssessmentReport(
+            report_id="CAR-999",
+            subscriber_id="sub-999",
+            coverage_status="degraded",
+            service_availability="partial",
+            outage_detected=True,
+            serving_market="ATL-01",
+            roaming_state="home",
+            registration_state="registered",
+            observations=["coverage degradation"],
+        )
+
+
 def test_workflow_runs_in_static_sequence():
     workflow = CoverageDiagnosticsWorkflow()
 
     report = CoverageAssessmentReport(
         report_id="CAR-001",
-        subscriber_id="sub-123",
+        subscriber_id="sub-202",
         coverage_status="degraded",
         service_availability="partial",
         outage_detected=True,
@@ -58,7 +87,7 @@ def test_workflow_rejects_missing_required_fields():
     workflow = CoverageDiagnosticsWorkflow()
     valid_report = CoverageAssessmentReport(
         report_id="CAR-003",
-        subscriber_id="sub-789",
+        subscriber_id="sub-210",
         coverage_status="normal",
         service_availability="full",
         outage_detected=False,
@@ -81,7 +110,7 @@ def test_workflow_reports_execution_path():
     workflow = CoverageDiagnosticsWorkflow()
     report = CoverageAssessmentReport(
         report_id="CAR-303",
-        subscriber_id="sub-303",
+        subscriber_id="sub-203",
         coverage_status="degraded",
         service_availability="partial",
         outage_detected=True,
@@ -118,6 +147,184 @@ def test_azure_openai_client_loads_settings_from_dotenv(tmp_path, monkeypatch):
     assert client.deployment == "gpt-4.1-mini"
 
 
+def test_azure_openai_client_logs_requests_and_responses(tmp_path, monkeypatch):
+    audit_path = tmp_path / "audit" / "openai_audit.jsonl"
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.services.ai.azure.com")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
+    monkeypatch.setenv("OPENAI_AUDIT_LOG_PATH", str(audit_path))
+
+    client = AzureOpenAIClient()
+
+    class FakeMessage:
+        content = (
+            '{"root_cause_summary":"Detected degradation","confidence":0.91,'
+            '"hypotheses":[{"type":"outage","description":"Problem detected","confidence":0.89}],'
+            '"recommended_actions":["Check outage feed"]}'
+        )
+
+    class FakeChoice:
+        message = FakeMessage()
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return type("CompletionResult", (), {"choices": [FakeChoice()]})()
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeAzureClient:
+        chat = FakeChat()
+
+    client._azure_client = FakeAzureClient()
+
+    report = CoverageAssessmentReport(
+        report_id="CAR-900",
+        subscriber_id="sub-205",
+        coverage_status="degraded",
+        service_availability="partial",
+        outage_detected=True,
+        serving_market="ATL-99",
+        roaming_state="home",
+        registration_state="registered",
+        observations=["degraded coverage"],
+    )
+
+    result = client.analyze_coverage_report(report)
+
+    assert result.mode == "live"
+    assert audit_path.exists()
+    with audit_path.open("r", encoding="utf-8") as handle:
+        record = json.loads(handle.readline().strip())
+    assert record["report_id"] == "CAR-900"
+    assert record["status"] == "success"
+    assert record["request"]["report_id"] == "CAR-900"
+    assert "root_cause_summary" in record["response"]["parsed_response"]
+
+
+def test_azure_openai_client_includes_previous_tickets_in_prompt(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.services.ai.azure.com")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
+    monkeypatch.delenv("OPENAI_AUDIT_LOG_PATH", raising=False)
+
+    client = AzureOpenAIClient()
+
+    class FakeMessage:
+        content = (
+            '{"root_cause_summary":"Detected degradation","confidence":0.91,'
+            '"hypotheses":[{"type":"outage","description":"Problem detected","confidence":0.89}],'
+            '"recommended_actions":["Check outage feed"]}'
+        )
+
+    class FakeChoice:
+        message = FakeMessage()
+
+    class FakeCompletions:
+        def __init__(self):
+            self.last_kwargs = None
+
+        def create(self, **kwargs):
+            self.last_kwargs = kwargs
+            return type("CompletionResult", (), {"choices": [FakeChoice()]})()
+
+    fake_completions = FakeCompletions()
+
+    class FakeChat:
+        completions = fake_completions
+
+    class FakeAzureClient:
+        chat = FakeChat()
+
+    client._azure_client = FakeAzureClient()
+    client.ticket_history = type(
+        "FakeTicketHistory",
+        (),
+        {"get_previous_tickets": lambda self, subscriber_id, limit=10: ["INC0010020", "INC0010022"]},
+    )()
+
+    report = CoverageAssessmentReport(
+        report_id="CAR-700",
+        subscriber_id="sub-204",
+        coverage_status="degraded",
+        service_availability="partial",
+        outage_detected=True,
+        serving_market="ATL-01",
+        roaming_state="home",
+        registration_state="registered",
+        observations=["coverage degradation", "regional outage"],
+    )
+
+    client.analyze_coverage_report(report)
+
+    prompt_text = fake_completions.last_kwargs["messages"][1]["content"]
+    assert '"previous_tickets": ["INC0010020", "INC0010022"]' in prompt_text
+
+
+def test_rca_service_adds_subscriber_operational_context_and_invalid_package_guidance(monkeypatch):
+    service = workflow_module.RCAService()
+
+    class FakeAIClient:
+        def __init__(self):
+            self.last_status = "live"
+            self.last_error = None
+            self.last_request = None
+            self.last_previous_tickets = None
+
+        def analyze_coverage_report(self, report, previous_tickets=None):
+            self.last_request = report.model_dump()
+            self.last_previous_tickets = previous_tickets
+            return type(
+                "Result",
+                (),
+                {
+                    "report_id": report.report_id,
+                    "root_cause_summary": "Detected issue",
+                    "confidence": 0.9,
+                    "mode": "live",
+                    "recommended_actions": ["Check outage"],
+                    "model_dump": lambda self: {
+                        "report_id": report.report_id,
+                        "root_cause_summary": "Detected issue",
+                        "confidence": 0.9,
+                        "mode": "live",
+                        "recommended_actions": ["Check outage"],
+                    },
+                },
+            )()
+
+    fake_ai = FakeAIClient()
+    service.ai_client = fake_ai
+    service.ticket_history = type(
+        "FakeTicketHistory",
+        (),
+        {"get_previous_tickets": lambda self, subscriber_id, limit=10: ["INC0010031"]},
+    )()
+    service.snowflake_client = type(
+        "FakeSnowflakeClient",
+        (),
+        {"get_subscriber_operational_data": lambda self, subscriber_id: {"subscriber_id": subscriber_id, "provision_status": "ON", "package": "INVALID"}},
+    )()
+
+    report = CoverageAssessmentReport(
+        report_id="CAR-777",
+        subscriber_id="sub-207",
+        coverage_status="degraded",
+        service_availability="partial",
+        outage_detected=True,
+        serving_market="ATL-01",
+        roaming_state="home",
+        registration_state="registered",
+        observations=["coverage degradation"],
+    )
+
+    result = service.analyze(report)
+
+    assert fake_ai.last_request["subscriber_id"] == "sub-207"
+    assert fake_ai.last_request["subscriber_operational_context"]["package"] == "INVALID"
+    assert any("INVALID" in action for action in result.recommended_actions)
+
+
 def test_workflow_runs_with_langgraph_mode_on(monkeypatch, caplog):
     class FakeCompiledGraph:
         def __init__(self, nodes):
@@ -152,7 +359,7 @@ def test_workflow_runs_with_langgraph_mode_on(monkeypatch, caplog):
     workflow = CoverageDiagnosticsWorkflow()
     report = CoverageAssessmentReport(
         report_id="CAR-101",
-        subscriber_id="sub-123",
+        subscriber_id="sub-201",
         coverage_status="degraded",
         service_availability="partial",
         outage_detected=True,
