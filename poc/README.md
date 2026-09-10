@@ -325,45 +325,66 @@ The current implementation centers on:
 - `servicenow_mcp_server.py` for incident create/get/update
 - `ticket_service.py` for decision policy and request shaping
 
-If you want, I can do the next exact step and move the POC from stubbed logic to a real Azure OpenAI integration skeleton with environment config and test coverage.
+# Azure Infra
+C:\azure-cli\bin>az login
+Select the account you want to log in with. For more information on login with Azure CLI, see https://go.microsoft.com/fwlink/?linkid=2271136
+
+Retrieving tenants and subscriptions for the selection...
+
+[Tenant and subscription selection]
+
+No     Subscription name     Subscription ID                       Tenant
+-----  --------------------  ------------------------------------  -----------------
+[1] *  Azure subscription 1  9ac96759-b77f-49d4-bd1e-6a4ec5642dd0  Default Directory
+[2]    Paid Subscription 1   1906a5ec-1647-4fc9-a1ce-08d1ea62a400  Default Directory
+
+The default is marked with an *; the default tenant is 'Default Directory' and subscription is 'Azure subscription 1' (9ac96759-b77f-49d4-bd1e-6a4ec5642dd0).
+
+Select a subscription and tenant (Type a number or Enter for no changes):
+
+Tenant: Default Directory
+Subscription: Azure subscription 1 (9ac96759-b77f-49d4-bd1e-6a4ec5642dd0)
+
+[Announcements]
+With the new Azure CLI login experience, you can select the subscription you want to use more easily. Learn more about it and its configuration at https://go.microsoft.com/fwlink/?linkid=2271236
+
+If you encounter any problem, please open an issue at https://aka.ms/azclibug
+
+[Warning] The login output has been updated. Please be aware that it no longer displays the full list of available subscriptions by default.
+
+
+C:\azure-cli\bin>az account show
 {
-  "clientId": "11111111-2222-3333-4444-555555555555",
-  "clientSecret": "<client-secret-value>",
-  "subscriptionId": "f3c58ce1-f6d3-4466-9593-438f0a6228ad",
-  "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+  "environmentName": "AzureCloud",
+  "homeTenantId": "05256b61-4fa5-4b04-90b5-c75b52d4272e",
+  "id": "9ac96759-b77f-49d4-bd1e-6a4ec5642dd0",
+  "isDefault": true,
+  "managedByTenants": [],
+  "name": "Azure subscription 1",
+  "state": "Enabled",
+  "tenantDefaultDomain": "sanojmzyahoo.onmicrosoft.com",
+  "tenantDisplayName": "Default Directory",
+  "tenantId": "05256b61-4fa5-4b04-90b5-c75b52d4272e",
+  "user": {
+    "name": "sanojmz@yahoo.com",
+    "type": "user"
+  }
 }
 
-
-az ad sp create-for-rbac --name "github-actions-sp" --role contributor --scopes /subscriptions/f3c58ce1-f6d3-4466-9593-438f0a6228ad --sdk-auth
-
-Display name
-:
-nora-app
-Application (client) ID
-:
-d705fab1-44e1-4aba-b48f-2a4f2d3da090
-Object ID
-:
-8c7332c2-a43d-4f74-b6ed-8e514c1c1cb4
-Directory (tenant) ID
-:
-05256b61-4fa5-4b04-90b5-c75b52d4272e
-Supported account types
-:
-My organization only
-Client credentials
-:
-Add a certificate or secret
-Redirect URIs
-:
-Add a Redirect URI
-Application ID URI
-:
-Add an Application ID URI
-Managed application in local directory
-:
-nora-app
-State
-:
-Activated
+C:\azure-cli\bin>az ad sp create-for-rbac --name "github-actions-sp" --role contributor --scopes /subscriptions/9ac96759-b77f-49d4-bd1e-6a4ec5642dd0 --sdk-auth
+Option '--sdk-auth' has been deprecated and will be removed in a future release.
+Creating 'contributor' role assignment under scope '/subscriptions/9ac96759-b77f-49d4-bd1e-6a4ec5642dd0'
+The output includes credentials that you must protect. Be sure that you do not include these credentials in your code or check the credentials into your source control. For more information, see https://aka.ms/azadsp-cli
+{
+  "clientId": "a6e1df52-ff35-4a07-94a3-757ebfd5588c",
+  "clientSecret": "",
+  "subscriptionId": "9ac96759-b77f-49d4-bd1e-6a4ec5642dd0",
+  "tenantId": "05256b61-4fa5-4b04-90b5-c75b52d4272e",
+  "activeDirectoryEndpointUrl": "https://login.microsoftonline.com",
+  "resourceManagerEndpointUrl": "https://management.azure.com/",
+  "activeDirectoryGraphResourceId": "https://graph.windows.net/",
+  "sqlManagementEndpointUrl": "https://management.core.windows.net:8443/",
+  "galleryEndpointUrl": "https://gallery.azure.com/",
+  "managementEndpointUrl": "https://management.core.windows.net/"
+}
 
