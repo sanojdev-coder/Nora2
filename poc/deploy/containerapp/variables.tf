@@ -1,6 +1,6 @@
 variable "resource_group_name" {
   type        = string
-  description = "Name of the Azure Resource Group"
+  description = "Name oof the Azure Resource Group"
   default     = "SanojResourceGroup"
 }
 
