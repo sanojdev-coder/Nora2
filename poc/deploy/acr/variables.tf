@@ -1,7 +1,7 @@
 variable "resource_group_name" {
   type        = string
   description = "Name of the Azure Resource Group"
-  default     = "RehnaResourceGroup"
+  default     = "SanojResourceGroup"
 }
 
 variable "location" {
@@ -13,7 +13,7 @@ variable "location" {
 variable "acr_name" {
   type        = string
   description = "Name of the Azure Container Registry"
-  default     = "rehnaacr"
+  default     = "sanojacr"
 }
 
 variable "acr_sku" {

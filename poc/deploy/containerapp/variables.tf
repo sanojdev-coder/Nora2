@@ -1,7 +1,7 @@
 variable "resource_group_name" {
   type        = string
   description = "Name of the Azure Resource Group"
-  default     = "RehnaResourceGroup"
+  default     = "SanojResourceGroup"
 }
 
 variable "location" {
@@ -13,7 +13,7 @@ variable "location" {
 variable "log_analytics_workspace_name" {
   type        = string
   description = "Name of the Log Analytics workspace used by the Container App Environment"
-  default     = "rehna-containerapps-logs"
+  default     = "sanoj-containerapps-logs"
 }
 
 variable "log_analytics_sku" {
@@ -31,7 +31,7 @@ variable "log_analytics_retention_days" {
 variable "container_app_environment_name" {
   type        = string
   description = "Name of the Azure Container App Environment"
-  default     = "rehna-container-apps-env"
+  default     = "sanoj-container-apps-env"
 }
 
 variable "tags" {
