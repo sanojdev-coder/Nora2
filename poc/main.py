@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -5,6 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.routes import router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(title="NORA Coverage Diagnostics")
 app.add_middleware(
@@ -26,4 +32,4 @@ async def serve_default_page():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=4021, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=4021, reload=True, log_level="info")

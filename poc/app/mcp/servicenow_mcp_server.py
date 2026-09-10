@@ -22,11 +22,9 @@ class ServiceNowMCPServer:
 
     def __init__(self):
         self.instance_url = os.getenv("SERVICENOW_INSTANCE_URL", "").strip().rstrip("/")
-        self.username = (
-            os.getenv("SERVICENOW_USERNAME", "").strip()
-            or os.getenv("SERVICENOW_CALLER_USERNAME", "").strip()
-        )
+        self.username = os.getenv("SERVICENOW_USERNAME", "").strip()
         self.password = os.getenv("SERVICENOW_PASSWORD", "").strip()
+        self.caller_username = os.getenv("SERVICENOW_CALLER_USERNAME", self.username).strip()
         verify_ssl_raw = os.getenv("SERVICENOW_VERIFY_SSL", "true").strip().lower()
         self.verify_ssl = verify_ssl_raw not in {"0", "false", "no"}
         self.ca_bundle = os.getenv("SERVICENOW_CA_BUNDLE", "").strip()
@@ -57,6 +55,10 @@ class ServiceNowMCPServer:
             "urgency": str(request.urgency),
             "contact_type": "api",
         }
+
+        caller_id = self._resolve_caller_id()
+        if caller_id:
+            payload["caller_id"] = caller_id
 
         try:
             result = self._request("POST", "/api/now/table/incident", json_body=payload)
@@ -271,6 +273,33 @@ class ServiceNowMCPServer:
             return str(ca_bundle_path)
 
         return True
+
+    def _resolve_caller_id(self) -> str | None:
+        if not self.caller_username:
+            return None
+
+        try:
+            result = self._request(
+                "GET",
+                "/api/now/table/sys_user",
+                params={
+                    "sysparm_query": f"user_name={self.caller_username}",
+                    "sysparm_limit": "1",
+                    "sysparm_fields": "sys_id,user_name,name",
+                },
+            )
+        except Exception:
+            logger.exception("ServiceNow MCP caller lookup failed username=%s", self.caller_username)
+            return None
+
+        rows = result if isinstance(result, list) else []
+        if not rows:
+            logger.warning("ServiceNow MCP caller lookup returned no user for username=%s", self.caller_username)
+            return None
+
+        caller_id = rows[0].get("sys_id")
+        logger.info("ServiceNow MCP caller resolved username=%s sys_id=%s", self.caller_username, caller_id)
+        return caller_id
 
     def _format_error_message(self, operation: str, exc: Exception) -> str:
         message = str(exc)
